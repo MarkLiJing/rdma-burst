@@ -1,0 +1,153 @@
+# RDMA 大文件传输服务 - 统一配置
+# 支持服务端和客户端模式自动检测
+
+# 运行模式配置
+mode: "auto"  # server, client, auto
+
+# 服务端配置（当运行模式为server或auto时使用）
+server:
+  host: "0.0.0.0"
+  port: 8080
+  log_level: "info"
+  read_timeout: "30s"
+  write_timeout: "30s"
+  max_header_bytes: 1048576
+
+# 客户端配置（当运行模式为client或auto时使用）
+client:
+  host: "10.208.63.11"
+  port: 8080
+  timeout: "30s"
+  retry_attempts: 3
+  retry_delay: "5s"
+
+# 传输配置（服务端和客户端共享）
+transfer:
+  # RDMA 设备配置
+  device: "mlx5_0"
+  
+  # 基础目录配置
+  base_dir: "/var/lib/rtrans"
+  
+  # 传输控制配置
+  transfer_interval: "5s"
+  max_concurrent_transfers: 1
+  chunk_size: 4194304  # 4MB
+  
+  # 传输模式配置
+  modes:
+    hugepages:
+      enabled: true
+      base_dir: "/dev/hugepages/dir"
+    tmpfs:
+      enabled: true  
+      base_dir: "/dev/shm/dir"
+    filesystem:
+      enabled: true
+      base_dir: "/var/lib/rtrans/files"
+  
+  # 客户端特定配置
+  default_mode: "filesystem"  # hugepages, tmpfs, filesystem
+
+# 日志配置
+logging:
+  # 服务端日志配置
+  server:
+    file_path: "/var/log/rtrans/rtrans_server.log"
+    max_size: 100  # MB
+    max_backups: 5
+    max_age: 30    # days
+    level: "info"
+    format: "json"  # json 或 text
+  
+  # 客户端日志配置
+  client:
+    file_path: "/var/log/rtrans/rtrans_client.log"
+    max_size: 50  # MB
+    max_backups: 3
+    max_age: 7    # days
+    level: "info"
+    format: "text"  # json 或 text
+
+# 监控配置
+monitoring:
+  # 服务端监控配置
+  server:
+    health_check_interval: "30s"
+    enable_metrics: true
+    metrics_port: 9090
+  
+  # 客户端监控配置
+  client:
+    progress_update_interval: "5s"
+    transfer_timeout: "1h"  # 单次传输最大超时时间
+
+# 安全配置
+security:
+  # CORS 配置
+  cors:
+    enabled: true
+    allowed_origins: ["*"]
+    allowed_methods: ["GET", "POST", "DELETE"]
+    allowed_headers: ["Content-Type", "Authorization"]
+  
+  # 速率限制
+  rate_limit:
+    enabled: true
+    requests_per_second: 10
+    burst: 20
+  
+  # TLS 配置（如果启用 HTTPS）
+  tls:
+    enabled: false
+    ca_cert: ""
+    client_cert: ""
+    client_key: ""
+  
+  # 认证配置
+  auth:
+    enabled: false
+    token: ""
+    username: ""
+    password: ""
+
+# 客户端特定配置
+client_specific:
+  # 并发控制
+  max_parallel_transfers: 1
+  
+  # 文件验证
+  enable_checksum: true
+  checksum_algorithm: "sha256"  # md5, sha1, sha256
+  
+  # 断点续传
+  enable_resume: true
+  resume_check_interval: "10s"
+
+# 互斥启动配置
+mutex:
+  # 是否启用互斥启动检查
+  enabled: true
+  
+  # 服务端端口检查超时
+  check_timeout: "3s"
+  
+  # 重试次数
+  retry_count: 3
+  
+  # 重试间隔
+  retry_interval: "1s"
+
+# 单次传输配置
+single_transfer:
+  # 是否启用单次传输模式
+  enabled: true
+  
+  # 传输完成后是否自动关闭连接
+  auto_close: true
+  
+  # 下次传输需要重新建立连接
+  require_reconnect: true
+  
+  # 连接保持时间（传输完成后）
+  keep_alive_timeout: "10s"

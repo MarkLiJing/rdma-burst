@@ -1,0 +1,89 @@
+# Go 编译输出
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Go 测试输出
+*.test
+*.out
+
+# Go 依赖管理
+vendor/
+go.sum
+
+# 二进制文件
+#/bin/
+/build/
+/dist/
+
+# 开发环境文件
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# 日志文件
+*.log
+logs/
+
+# 运行时数据
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# 覆盖率工具
+coverage.txt
+coverage.html
+*.coverprofile
+
+# 临时文件
+*.tmp
+*.temp
+.tmp/
+.temp/
+
+# 编辑器文件
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 操作系统文件
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# 项目特定文件
+# 传输任务状态文件（根据配置可能生成）
+*.transfer
+*.status
+
+# 配置文件（生产环境使用外部配置）
+configs/server.yaml
+configs/client.yaml
+
+# 测试数据
+testdata/
+*.testdata
+
+# 文档生成
+docs/_build/
+docs/artifacts/
+docs/*.md
+
+scripts/*test*.sh
+
+/specs
+
+# 开发工具配置
+.roo/
+.specify/
