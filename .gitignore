@@ -14,7 +14,7 @@ vendor/
 go.sum
 
 # 二进制文件
-#/bin/
+/bin/
 /build/
 /dist/
 

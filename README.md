@@ -1,15 +1,15 @@
 # RDMA 大文件传输服务
 
-基于现有 rtranfile 命令行工具的 RDMA 大文件传输 RESTful API 服务。
+基于两阶段传输架构的 RDMA 大文件传输 RESTful API 服务，支持自动模式检测和统一配置管理。
 
 ## 功能特性
 
 - 🚀 **高性能传输**: 支持 RDMA 大页内存、tmpfs、文件系统三种传输模式
-- 🔄 **RESTful API**: 完整的 HTTP API 接口，支持传输管理和状态监控
-- ⚡ **并发控制**: 单次传输，避免并发操作，支持传输间隔配置
+- 🔄 **两阶段架构**: 准备阶段和传输阶段分离，提供更好的错误处理和资源管理
+- ⚡ **自动模式检测**: 支持服务端、客户端和自动模式检测
 - 📊 **状态监控**: 实时传输进度、速度、错误信息监控
 - 🔒 **错误恢复**: 传输中断后的恢复机制和完整性校验
-- 🐳 **容器化支持**: Docker 容器化部署配置
+- 🐳 **统一配置**: 单一配置文件支持所有运行模式
 
 ## 传输模式
 
@@ -35,7 +35,6 @@
 - Linux 操作系统
 - RDMA 设备支持 (mlx5_0)
 - Go 1.21+ 环境
-- rtranfile 二进制文件
 
 ### 安装部署
 
@@ -44,40 +43,54 @@
 git clone <repository-url>
 cd rdma-burst
 
-# 2. 准备 rtranfile 工具
-cp /path/to/rtranfile ./bin/
-chmod +x ./bin/rtranfile
-
-# 3. 安装依赖
+# 2. 安装依赖
 go mod tidy
 
-# 4. 配置大页内存 (可选)
+# 3. 构建项目
+make build
+
+# 4. 配置大页内存 (可选，仅用于hugepages模式)
 echo 1024 > /sys/kernel/mm/hugepages/hugepages-2048kB/nr_hugepages
 mkdir -p /dev/hugepages/dir
 mount -t hugetlbfs nodev /dev/hugepages/dir
 
-# 5. 启动服务
-go run cmd/server/main.go --config configs/server.yaml
+# 5. 启动服务端（在服务端机器上执行）
+./build/rdma-burst --mode combined --config configs/combined.yaml
 ```
 
 ### API 使用示例
 
 ```bash
-# 创建传输任务
-curl -X POST http://localhost:8080/api/v1/transfers \
+# 1. 检查服务状态（在服务端机器上）
+curl http://localhost:8080/api/health
+
+# 2. 创建文件系统传输任务（在客户端机器上，替换为实际服务端IP）
+curl -X POST http://服务端IP:8080/api/v1/transfers \
   -H "Content-Type: application/json" \
   -d '{
-    "source_path": "/data/largefile.iso",
-    "destination_path": "/dev/hugepages/dir/largefile.iso", 
-    "transfer_mode": "hugepages",
-    "file_size": 53687091200
+    "filename": "/data/largefile.iso",
+    "mode": "filesystem",
+    "direction": "put"
   }'
 
-# 检查传输状态
-curl http://localhost:8080/api/v1/transfers/{task_id}
+# 3. 检查传输状态
+curl http://服务端IP:8080/api/v1/transfers/{task_id}
 
-# 列出所有任务
-curl http://localhost:8080/api/v1/transfers
+# 4. 列出所有任务
+curl http://服务端IP:8080/api/v1/transfers
+```
+
+### 模式检测 API
+
+```bash
+# 获取当前运行模式
+curl http://localhost:8080/api/v1/mode
+
+# 检测运行模式
+curl http://localhost:8080/api/v1/mode/detect
+
+# 获取详细模式状态
+curl http://localhost:8080/api/v1/mode/status
 ```
 
 ## 项目结构
@@ -86,102 +99,156 @@ curl http://localhost:8080/api/v1/transfers
 rdma-burst/
 ├── cmd/                 # 应用程序入口
 │   ├── server/         # 服务端主程序
-│   └── client/         # 客户端主程序
+│   ├── client/         # 客户端主程序
+│   └── combined/       # 统一可执行文件（推荐）
 ├── internal/           # 内部包
-│   ├── api/           # API 处理层
-│   ├── services/      # 业务逻辑层
+│   ├── api/           # API 处理层（模式检测、传输管理）
+│   ├── services/      # 业务逻辑层（两阶段传输架构）
 │   ├── models/        # 数据模型
-│   └── wrapper/       # rtranfile 包装器
-├── pkg/               # 可重用包
-│   ├── logger/        # 日志系统
 │   ├── utils/         # 工具函数
-│   └── types/         # 公共类型
+│   └── wrapper/       # rtranfile 包装器
 ├── configs/           # 配置文件
+│   └── combined.yaml  # 统一配置文件（推荐）
+├── scripts/           # 脚本文件
+│   ├── start-server.sh    # 服务启动脚本
+│   ├── test-new-architecture.sh  # 新架构测试脚本
+│   └── debug-transfer.sh  # 传输调试脚本
 ├── tests/             # 测试文件
+│   ├── unit/         # 单元测试
+│   ├── integration/  # 集成测试
+│   └── e2e/          # 端到端测试
 ├── docs/              # 文档
-└── specs/             # 项目规范
+│   ├── api/          # API 文档
+│   ├── architecture/ # 架构文档
+│   └── deployment/   # 部署文档
+└── Makefile          # 构建脚本
 ```
 
 ## 配置说明
 
-### 服务端配置 (configs/server.yaml)
+### 统一配置 (configs/combined.yaml)
 
 ```yaml
+# 运行模式配置
+mode: "auto"  # server, client, auto
+
+# 服务端配置
 server:
   host: "0.0.0.0"
   port: 8080
 
+# 客户端配置
+client:
+  host: "10.208.63.11"  # 替换为实际服务端IP
+  port: 8080
+
+# 传输配置
 transfer:
   device: "mlx5_0"
   base_dir: "/var/lib/rtrans"
   transfer_interval: "5s"
   max_concurrent_transfers: 1
-```
-
-### 客户端配置 (configs/client.yaml)
-
-```yaml
-server:
-  host: "localhost" 
-  port: 8080
-  timeout: "30s"
-
-transfer:
-  device: "mlx5_0"
-  default_mode: "filesystem"
+  
+  # 传输模式配置
+  modes:
+    hugepages:
+      enabled: true
+      base_dir: "/dev/hugepages/dir"
+    tmpfs:
+      enabled: true
+      base_dir: "/dev/shm/dir"
+    filesystem:
+      enabled: true
+      base_dir: "/var/lib/rtrans/files"
 ```
 
 ## API 文档
 
-详细的 API 接口文档请参考 [API 文档](docs/api/README.md) 或 [OpenAPI 规范](specs/001-rdma-file-transfer/contracts/openapi.yaml)。
+详细的 API 接口文档请参考：
+- [RESTful API 文档](docs/api/restful-api.md) - 完整的API接口说明
+- [API 快速参考](docs/api-transfer-quick-reference.md) - 常见问题解答
+- [快速使用指南](docs/quickstart-guide.md) - 快速上手教程
 
 ## 开发指南
 
 ### 构建项目
 
 ```bash
-# 构建服务端
-go build -o bin/server cmd/server/main.go
+# 构建所有目标
+make build
 
-# 构建客户端
-go build -o bin/client cmd/client/main.go
+# 仅构建服务端
+make server
+
+# 仅构建客户端
+make client
+
+# 构建统一可执行文件（推荐）
+make combined
 ```
 
 ### 运行测试
 
 ```bash
-# 运行单元测试
-go test ./tests/unit/...
-
-# 运行集成测试  
-go test ./tests/integration/...
-
 # 运行所有测试
-go test ./...
+make test
+
+# 运行单元测试
+make test-unit
+
+# 运行集成测试
+make test-integration
+
+# 运行端到端测试
+make test-e2e
 ```
 
 ### 代码规范
 
 项目遵循标准的 Go 代码规范：
-- 使用 `go fmt` 格式化代码
-- 使用 `go vet` 检查代码问题
-- 遵循 Go 命名约定
+- 使用 `make fmt` 格式化代码
+- 使用 `make vet` 检查代码问题
+- 使用 `make lint` 进行代码质量检查
+
+### 开发模式运行
+
+```bash
+# 开发模式运行服务端
+make run-server
+
+# 创建发布包
+make dist
+
+# 安装到系统
+make install
+```
 
 ## 部署指南
 
-### Docker 部署
+### 服务端部署
 
 ```bash
-# 构建 Docker 镜像
-docker build -t rdma-burst .
+# 1. 构建项目
+make build
 
-# 运行容器
-docker run -d \
-  --name rdma-burst \
-  --privileged \
-  -p 8080:8080 \
-  -v /dev/hugepages:/dev/hugepages \
-  rdma-burst
+# 2. 启动服务端（推荐使用统一可执行文件）
+./build/rdma-burst --mode combined --config configs/combined.yaml
+
+# 3. 验证服务状态
+curl http://localhost:8080/api/health
+```
+
+### 客户端使用
+
+```bash
+# 客户端只需要通过HTTP API与服务端通信
+curl -X POST http://服务端IP:8080/api/v1/transfers \
+  -H "Content-Type: application/json" \
+  -d '{
+    "filename": "/data/file.bin",
+    "mode": "filesystem",
+    "direction": "put"
+  }'
 ```
 
 ### 系统服务部署
@@ -190,11 +257,32 @@ docker run -d \
 
 ## 故障排除
 
-常见问题请参考 [故障排除指南](docs/troubleshooting.md)。
+常见问题请参考：
+- [调试指南](docs/debug-guide.md) - 详细的故障排除步骤
+- [传输失败分析](docs/transmission-failure-analysis.md) - 传输问题分析
+- [快速使用指南](docs/quickstart-guide.md) - 常见问题解答
+
+## 关键改进
+
+### 两阶段传输架构
+- **准备阶段**: 自动启动服务端监听进程（通过 `PrepareTransfer` 方法）
+- **传输阶段**: 执行实际的传输任务（通过 `StartTransfer` 方法）
+- **资源回收**: 传输完成后自动清理资源
+- **超时机制**: 添加5秒超时，避免API调用卡住
+
+### 统一配置管理
+- 单一配置文件支持所有运行模式（`configs/combined.yaml`）
+- 自动模式检测和切换（支持 `server`、`client`、`auto` 模式）
+- 更好的错误处理和状态管理
+
+### API 简化
+- 客户端只需一次API调用完成整个传输过程
+- 服务端地址从配置文件中获取，无需在请求中指定
+- 支持模式检测API，便于自动化部署
 
 ## 贡献指南
 
-欢迎提交 Issue 和 Pull Request！请参考 [贡献指南](CONTRIBUTING.md)。
+欢迎提交 Issue 和 Pull Request！请参考项目规范文档。
 
 ## 许可证
 
